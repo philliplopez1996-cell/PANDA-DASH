@@ -269,6 +269,10 @@ let zone=0,tint=[0,0,0,0,0],zoneFlash=0,deathAt=0,deathPos=null,runBanked=true;
 let dailyMode=false,dailyBestAtStart=0;
 // pacing: slower ramp and lower top speed so a phone player has time to react
 const SPEED_SPAN=2.0,RAMP_FRAMES=3600,ZONE_LEN=1500;      // 6.5 -> 8.5 over 60 seconds; a new zone every 1,500 points
+// flight handling: hold to rise, let go to sink
+// Tuned so a player reacting a quarter of a second late can still steer through: gentler lift and fall, a little
+// air drag so the glider settles instead of swinging, wider gaps, smaller height changes, and a straight first gate.
+let FLY={up:0.45,down:0.32,maxUp:4.5,maxDown:4.5,drag:0.04,half:155,drift:90,space:400,gates:7,lead:120};
 let rushPrev=false;
 // ----- zone colours: each forest layer is recoloured once per zone and cached -----
 let zFrom=0,zTo=0,zT=1;
@@ -689,7 +693,7 @@ function drawWarnings(){
   for(const o of obstacles){
     const sx=o.x-worldX;if(sx<=VW||sx>reach)continue;
     const a=1-(sx-VW)/Math.max(1,reach-VW);
-    if(p.fly){if(o.type==='spike'&&o.kind==='branch'&&gateY===null)gateY=o.h+140;continue;}
+    if(p.fly){if(o.type==='spike'&&o.kind==='branch'&&gateY===null)gateY=o.h+FLY.half;continue;}
     if(o.type==='spike'&&o.kind==='branch')low=Math.max(low,a);
     else if(o.type==='spike'||o.type==='pit'||o.type==='block')jump=Math.max(jump,a);
   }
@@ -767,9 +771,9 @@ const CHUNKS=[
   (x,g)=>[mk.block(x,g,56,96),mk.coin(x+28,g-96-44)],                                                                            // 31 pillar
   (x,g,sp)=>{const w=sp*60+200,o=[mk.block(x,g,w,44),mk.rock(x+w*0.55,g-44)];coinLine(x+40,g-44-30,3,o);return o;},              // 32 raised ground with a rock on it
   (x,g,sp)=>{                                                                                                                   // 33 flight: portal, bamboo gates, portal back
-    const o=[mk.portal(x,'fly')],space=Math.max(400,sp*50),half=140;let c=g-300,xx=x+sp*55+220;
-    for(let i=0;i<7;i++){
-      c=Math.max(210,Math.min(g-210,c+(rndObs()*2-1)*120));
+    const o=[mk.portal(x,'fly')],space=Math.max(FLY.space,sp*50),half=FLY.half;let c=g-300,xx=x+sp*55+220+FLY.lead;
+    for(let i=0;i<FLY.gates;i++){
+      c=Math.max(210,Math.min(g-210,c+(i===0?0:(rndObs()*2-1)*FLY.drift)));      // first gate straight ahead
       o.push(mk.hang(xx,c-half),mk.stalag(xx,g,c+half),mk.coin(xx+32,c),mk.coin(xx+32+space/2,c));
       xx+=space;
     }
@@ -1056,7 +1060,7 @@ function update(){
   rushPrev=rushNow;
   if(activePower?.id==='triplejump') p.jumps=3;
 
-  if(p.fly){p.vy=Math.max(-7.5,Math.min(8,p.vy+(holding?-0.95:0.5)));p.y+=p.vy;}      // flight: hold to rise, let go to sink
+  if(p.fly){p.vy=Math.max(-FLY.maxUp,Math.min(FLY.maxDown,p.vy*(1-FLY.drag)+(holding?-FLY.up:FLY.down)));p.y+=p.vy;}      // flight: hold to rise, let go to sink
   else{p.vy=Math.min(p.vy+GRAVITY,MAX_FALL);p.y+=p.vy;}
   p.sq*=0.82;
   // leaf trail when things get fast
@@ -1160,7 +1164,7 @@ function update(){
       if(!obs.done&&p.x+PLAYER_SIZE/2>sx+obs.w/2){
         obs.done=true;p.fly=obs.mode==='fly';sfxZone();
         burst(sx+obs.w/2,p.y+PLAYER_SIZE/2,obs.mode==='fly'?'#46EBFF':'#ffd23a');
-        if(p.fly){p.vy=-4;p.onGround=false;floatText('HOLD TO FLY',VW/2,300,'#46EBFF',true,true);}
+        if(p.fly){p.vy=-2.5;p.onGround=false;floatText('HOLD TO FLY',VW/2,280,'#46EBFF',true,true);floatText('hold = up · let go = down',VW/2,318,'#fff',false,true);}
         else{p.jumps=1;}
       }
     } else if(obs.type==='pad'){
